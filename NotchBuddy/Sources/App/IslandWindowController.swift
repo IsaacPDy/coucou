@@ -891,6 +891,22 @@ final class IslandWindowController: NSWindowController {
             self.silentNextReveal = false
         }
 
+        #if DEBUG
+        // Debug builds only: `open-pill <pill id>` from Terminal opens the island on that pill
+        // (used to check cards without driving the mouse).
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("myNotch.debug.openPill"), object: nil, queue: .main
+        ) { [weak self] note in
+            let id = note.object as? String
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let id { self.state.setFocus(id) }
+                self.fsm.openedExternally()
+                self.expand(to: .overview)
+            }
+        }
+        #endif
+
         // Email prepared by voice: open the mail card, filled in, for me to check and send.
         NotificationCenter.default.addObserver(forName: .voiceShowMailCard, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }

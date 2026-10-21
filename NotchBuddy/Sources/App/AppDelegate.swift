@@ -307,9 +307,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if !APPSTORE
         _ = MusicController.shared
         _ = SpotifyController.shared
+        _ = NowPlayingController.shared
+        _ = AIUsageMonitor.shared
         MailController.shared.start()
         WhatsAppController.shared.start()
-        MacUpdater.shared.start()
+        // No MacUpdater: this is a personal fork, and "Update now" would swap it for the
+        // official Coucou release. Updates come from merging upstream instead.
         ClaudeDesktopChatWatcher.shared.start()
         #endif
         CryptoController.shared.start()

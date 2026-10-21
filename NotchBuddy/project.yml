@@ -194,6 +194,12 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "Coucou Developer ID"
     dependencies:
       - package: FluidAudio
+      # Loaded by /usr/bin/perl to read the system's Now Playing (NowPlayingController.swift)
+      - target: NowPlayingHelper
+        embed: true
+        link: false
+        copy:
+          destination: resources
     postBuildScripts:
       - name: "Write Git Hash to Info.plist"
         script: |
@@ -201,6 +207,22 @@ targets:
           /usr/libexec/PlistBuddy -c "Set :CoucouGitHash ${HASH}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null \
             || /usr/libexec/PlistBuddy -c "Add :CoucouGitHash string ${HASH}" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
         showEnvVars: false
+
+  # Now Playing helper: a tiny library /usr/bin/perl loads, because only Apple-entitled
+  # processes may read MediaRemote since macOS 15.4. See NowPlayingHelper.m.
+  NowPlayingHelper:
+    type: library.dynamic
+    platform: macOS
+    sources:
+      - path: NowPlayingHelper
+    settings:
+      base:
+        PRODUCT_NAME: CoucouNowPlaying
+        EXECUTABLE_PREFIX: lib
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        CLANG_ENABLE_OBJC_ARC: YES
+        SKIP_INSTALL: YES
+        OTHER_LDFLAGS: "-framework Foundation"
 
   CoucouAppStore:
     type: application

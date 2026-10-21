@@ -304,6 +304,12 @@ struct OverviewView: View {
             #if !APPSTORE
             SpotifyController.shared.openSpotify()
             #endif
+        case "integration_nowplaying":
+            #if !APPSTORE
+            NowPlayingController.shared.openSource()
+            #endif
+        case "integration_usage":
+            NSWorkspace.shared.open(URL(string: "https://claude.ai/settings/usage")!)
         default:
             // Non-integration real tasks
             if task.source == .n8n {
@@ -1952,6 +1958,12 @@ struct IntegrationCardView: View {
             #endif
         case "agent_claude-desktop":
             return true  // nothing to install: the relay tags desktop sessions on its own
+        case "integration_nowplaying", "integration_usage":
+            #if !APPSTORE
+            return true  // nothing to set up: they read what's already on this Mac
+            #else
+            return false
+            #endif
         case "integration_music":
             #if !APPSTORE
             return true  // Apple Music is always installed on macOS
@@ -2243,6 +2255,17 @@ struct IntegrationCardView: View {
         } else if isSpotify {
             #if !APPSTORE
             SpotifyCardView()
+                .transition(.opacity)
+            #endif
+        } else if task.id == "integration_nowplaying" {
+            // Its own card in every state (playing, paused, nothing playing).
+            #if !APPSTORE
+            NowPlayingCardView()
+                .transition(.opacity)
+            #endif
+        } else if task.id == "integration_usage" {
+            #if !APPSTORE
+            UsageCardView()
                 .transition(.opacity)
             #endif
         } else if agentSessionActive {
@@ -4121,6 +4144,20 @@ struct AgentPillsView: View {
                         }
                     } else if task.id == "integration_spotify" {
                         SpotifyPill(task: task, swapping: $swapping) {
+                            swapping = true
+                            state.setFocus(task.id)
+                            SoundEngine.shared.play("blip")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                        }
+                    } else if task.id == NowPlayingController.pillId {
+                        NowPlayingPill(task: task, swapping: $swapping) {
+                            swapping = true
+                            state.setFocus(task.id)
+                            SoundEngine.shared.play("blip")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { swapping = false }
+                        }
+                    } else if task.id == AIUsageMonitor.pillId {
+                        UsagePill(task: task, swapping: $swapping) {
                             swapping = true
                             state.setFocus(task.id)
                             SoundEngine.shared.play("blip")

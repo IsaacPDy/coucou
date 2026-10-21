@@ -456,6 +456,8 @@ final class AppState: ObservableObject {
 
     #if !APPSTORE
     @Published var musicPlaying: Bool = false
+    /// Something plays in the system's Now Playing (NowPlayingController).
+    @Published var nowPlayingActive: Bool = false
     @Published var musicAutomationDenied: Bool = false
 
     // Voice command result (shown in VoiceResultView for ~2 s, then cleared by IWC)
@@ -558,6 +560,21 @@ final class AppState: ObservableObject {
            let a = try? JSONDecoder().decode([String].self, from: d) { n8nWorkflowFilter = Set(a) }
         if let d = ud.data(forKey: "activeIntegrations"),
            let a = try? JSONDecoder().decode([String].self, from: d) { activeIntegrations = Set(a) }
+        #if !APPSTORE
+        // This fork's own pills come on once, making room among the 4 if needed.
+        if !ud.bool(forKey: "myNotch.defaultPillsAdded") {
+            var active = activeIntegrations
+            for id in ["integration_usage", "integration_nowplaying"] where !active.contains(id) {
+                if active.count >= 4, let drop = ["integration_resend", "integration_n8n", "integration_vercel",
+                                                  "integration_github"].first(where: active.contains) ?? active.first {
+                    active.remove(drop)
+                }
+                active.insert(id)
+            }
+            activeIntegrations = active
+            ud.set(true, forKey: "myNotch.defaultPillsAdded")
+        }
+        #endif
         if let v = ud.string(forKey: "mainPill"), !v.isEmpty,
            PillCatalog.available.contains(where: { $0.id == v && $0.category == .workspace && !$0.comingSoon }) {
             mainPillId = v

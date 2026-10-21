@@ -47,7 +47,9 @@ struct DesktopBotView: View {
                     let music = appState.musicPlaying && appState.activeIntegrations.contains("integration_music")
                     let spotify = SpotifyController.shared.isPlaying
                         && appState.activeIntegrations.contains(SpotifyController.pillId)
-                    guard music || spotify else { return false }
+                    let nowPlaying = appState.nowPlayingActive
+                        && appState.activeIntegrations.contains(NowPlayingController.pillId)
+                    guard music || spotify || nowPlaying else { return false }
                     let allowed: Set<BotState> = [.idle, .working, .thinking, .searching, .finished]
                     return allowed.contains(appState.effectiveState)
                     #else
