@@ -314,6 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // No MacUpdater: this is a personal fork, and "Update now" would swap it for the
         // official Coucou release. Updates come from merging upstream instead.
         ClaudeDesktopChatWatcher.shared.start()
+        FrontAppUsageStrip.shared.start()
         #endif
         CryptoController.shared.start()
         PortfolioController.shared.start()

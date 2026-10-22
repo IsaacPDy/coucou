@@ -440,8 +440,8 @@ final class AIUsageMonitor: ObservableObject {
         refresh()
     }
 
-    func refresh(force: Bool = false) {
-        guard isPillActive else { return }
+    func refresh(force: Bool = false, ignoringPillState: Bool = false) {
+        guard isPillActive || ignoringPillState else { return }
         for p in AIUsageProvider.allCases {
             if !force, let last = lastRead[p], Date().timeIntervalSince(last) < interval(p) { continue }
             guard !inFlight.contains(p) else { continue }
