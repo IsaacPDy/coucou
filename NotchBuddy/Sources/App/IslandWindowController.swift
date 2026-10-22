@@ -593,9 +593,12 @@ final class IslandWindowController: NSWindowController {
         switch m { case .hidden: return 0; case .compact: return 1; case .expanded: return 2 }
     }
 
-    func setMode(_ mode: IslandMode) {
+    func setMode(_ mode: IslandMode, keepFocus: Bool = false) {
         let prev = state.mode
         guard mode != prev else { return }
+        #if !APPSTORE
+        if mode == .expanded && !keepFocus { focusUsageOnOpen() }
+        #endif
         let shrinking = modeLevel(mode) < modeLevel(prev)
         let anim: Animation = shrinking
             ? .timingCurve(0.45, 0, 0.2, 1, duration: 0.34)
@@ -606,15 +609,39 @@ final class IslandWindowController: NSWindowController {
             SoundEngine.shared.play("close")
             if fsm.isHeldOpen?() != true { state.isPinned = false }
             HookServer.shared.restoreAlertFocus()
+            #if !APPSTORE
+            releaseUsageFocus()
+            #endif
         }
     }
 
-    func expand(to view: IslandView) {
+    #if !APPSTORE
+    /// The island opens on the AI Usage card when that pill is on, unless something else
+    /// took the focus while it was closed (an alert, music, a crypto move…).
+    private func focusUsageOnOpen() {
+        let usageId = AIUsageMonitor.pillId
+        guard state.view == .overview,
+              state.pendingApproval == nil, state.pendingQuestion == nil,
+              state.focusId == nil || state.focusId == state.mainPillId,
+              state.tasks.contains(where: { $0.id == usageId }) else { return }
+        state.setFocus(usageId)
+    }
+
+    /// Closed: the main pill takes the focus back, so the compact Mochi follows its agent again.
+    private func releaseUsageFocus() {
+        guard state.focusId == AIUsageMonitor.pillId,
+              state.tasks.contains(where: { $0.id == state.mainPillId }) else { return }
+        state.focusId = state.mainPillId
+    }
+    #endif
+
+    /// `keepFocus`: the caller picked the pill to open on, don't swap in AI Usage.
+    func expand(to view: IslandView, keepFocus: Bool = false) {
         state.view = view
         if state.mode == .expanded {
             // Already expanded — just switch view
         } else {
-            setMode(.expanded)
+            setMode(.expanded, keepFocus: keepFocus)
         }
         state.lastActivity = .now
     }
@@ -802,14 +829,14 @@ final class IslandWindowController: NSWindowController {
         let cur = ids.firstIndex(of: state.focusId ?? "") ?? 0
         state.setFocus(ids[(cur + delta + ids.count) % ids.count])
         state.cardSelection = nil
-        expand(to: .overview)
+        expand(to: .overview, keepFocus: true)
     }
 
     private func switchToPill(number: Int) {
         guard number >= 1, number <= state.tasks.count else { return }
         state.setFocus(state.tasks[number - 1].id)
         state.cardSelection = nil
-        expand(to: .overview)
+        expand(to: .overview, keepFocus: true)
     }
 
     private func navigateCard(by delta: Int) {
@@ -902,7 +929,7 @@ final class IslandWindowController: NSWindowController {
                 guard let self else { return }
                 if let id { self.state.setFocus(id) }
                 self.fsm.openedExternally()
-                self.expand(to: .overview)
+                self.expand(to: .overview, keepFocus: id != nil)
             }
         }
         #endif
