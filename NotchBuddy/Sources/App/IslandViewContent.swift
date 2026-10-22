@@ -2208,6 +2208,32 @@ struct IntegrationCardView: View {
             .transition(.opacity)
         } else if githubHasPulse {
             GitHubPulseCardView(
+        } else if let project = openVercelProject {
+            if let dep = appState.vercelProjectDeployments[project.id]?.first(where: { $0.id == vercelDeploymentId }) {
+                VercelDetailView(deployment: dep) {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { vercelDeploymentId = nil }
+                }
+                .transition(.opacity)
+            } else {
+                VercelProjectDeploymentsView(
+                    project: project,
+                    deployments: appState.vercelProjectDeployments[project.id],
+                    onBack: {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = false }
+                    },
+                    onOpen: { dep in
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { vercelDeploymentId = dep.id }
+                    }
+                )
+                .transition(.opacity)
+            }
+        } else if !vercelProjects.isEmpty {
+            VercelProjectListView(projects: vercelProjects, onOpen: { project in
+                vercelProjectId = project.id
+                vercelDeploymentId = nil
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = true }
+            })
+            .transition(.opacity)
                 pulse: appState.githubPulse!,
                 stats: appState.githubStats,
                 activity: appState.githubActivity,
@@ -2591,7 +2617,7 @@ struct VercelDetailView: View {
     let deployment: VercelDeployment
     let onClose: () -> Void
 
-    private var accent: Color { Color(hex: deployment.isSuccess ? "#22C55E" : "#F4505E") }
+    private var accent: Color { Color(hex: deployment.accentHex) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -2708,6 +2734,239 @@ struct ResendCardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 if let first = emails.first {
                     let accent = Color(hex: first.isDelivered ? "#22C55E" : "#F4505E")
+// MARK: - Card Scroll List
+
+/// A scrolling list of 20 pt rows for an integration card: three rows show, the
+/// rest scroll under a fade. Rows are clickable and follow the arrow-key selection.
+struct CardScrollList<Item: Identifiable, Row: View>: View {
+    let items: [Item]
+    let onActivate: (Item) -> Void
+    @ViewBuilder let row: (Item) -> Row
+    @ObservedObject private var appState = AppState.shared
+    @State private var owner = UUID()
+
+    private let rowHeight: CGFloat = 20
+    private let visibleRows = 3
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                        Button(action: { onActivate(item) }) {
+                            row(item)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(height: rowHeight)
+                                .contentShape(Rectangle())
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.white.opacity(0.12))
+                                        .opacity(appState.cardSelection == idx ? 1 : 0)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .id(item.id)
+                    }
+                }
+            }
+            .frame(maxHeight: rowHeight * CGFloat(visibleRows))
+            .mask(
+                Group {
+                    if items.count > visibleRows {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 0.8),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    } else {
+                        Color.black
+                    }
+                }
+            )
+            .onChange(of: appState.cardSelection) { _, sel in
+                guard let sel, items.indices.contains(sel) else { return }
+                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(items[sel].id) }
+            }
+        }
+        .onAppear {
+            appState.cardListOwner = owner
+            appState.cardSelection = nil
+            appState.cardItemCount = items.count
+        }
+        .onChange(of: items.count) { _, n in
+            if appState.cardListOwner == owner { appState.cardItemCount = n }
+        }
+        .onDisappear {
+            guard appState.cardListOwner == owner else { return }
+            appState.cardListOwner = nil
+            appState.cardItemCount = 0
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .islandActivateCardSelection)) { _ in
+            guard appState.cardListOwner == owner,
+                  let sel = appState.cardSelection, items.indices.contains(sel) else { return }
+            onActivate(items[sel])
+        }
+    }
+}
+
+/// Back chevron + title on the left, an ↗ button on the right: the header of a drill-down card.
+private struct CardDrillHeader: View {
+    let title: String
+    let onBack: () -> Void
+    let onOpen: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: onBack) {
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 8, weight: .medium))
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                .foregroundColor(Color(hex: "#F5F6F8"))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 2)
+            if let onOpen {
+                Button(action: onOpen) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundColor(Color(hex: "#5F646D"))
+                        .frame(width: 16, height: 16)
+                        .background(Color.white.opacity(0.07))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 6)
+        .padding(.leading, 108)
+        .padding(.trailing, 10)
+    }
+}
+
+/// Grey one-line placeholder under a card header ("Loading…", "No deployments").
+private struct CardPlaceholderText: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10.5))
+            .foregroundColor(Color(hex: "#6B7079"))
+            .padding(.top, 8)
+            .padding(.leading, 108)
+    }
+}
+
+// MARK: - Vercel Project List View
+
+struct VercelProjectListView: View {
+    let projects: [VercelProject]
+    let onOpen: (VercelProject) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color(hex: "#7C5CFF"))
+                    .frame(width: 7, height: 7)
+                Text("Vercel")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(hex: "#F5F6F8"))
+                Text(verbatim: "\(projects.count)")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(hex: "#8E939C"))
+            }
+            .padding(.top, 6)
+            .padding(.leading, 108)
+            .padding(.trailing, 36)
+
+            CardScrollList(items: projects, onActivate: onOpen) { project in
+                HStack(spacing: 5) {
+                    Circle().fill(Color(hex: project.accentHex)).frame(width: 5, height: 5)
+                    Text(project.name)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color(hex: "#C5C8CD"))
+                        .lineLimit(1).truncationMode(.tail)
+                        .layoutPriority(1)
+                    Spacer(minLength: 4)
+                    Text(shortTimeAgo(project.updatedAt))
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(hex: "#6B7079"))
+                        .fixedSize()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundColor(Color(hex: "#4A4F57"))
+                }
+                .padding(.trailing, 4)
+            }
+            .padding(.top, 4)
+            .padding(.leading, 108)
+            .padding(.trailing, 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.top, 4)
+        .clipped()
+        .onAppear { VercelPoller.shared.refreshProjectsIfStale() }
+    }
+}
+
+// MARK: - Vercel Project Deployments View
+
+struct VercelProjectDeploymentsView: View {
+    let project: VercelProject
+    let deployments: [VercelDeployment]?    // nil while loading
+    let onBack: () -> Void
+    let onOpen: (VercelDeployment) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CardDrillHeader(title: project.name, onBack: onBack, onOpen: {
+                let site = project.productionURL.map { "https://\($0)" } ?? "https://vercel.com/dashboard"
+                if let url = safeWebURL(site) { NSWorkspace.shared.open(url) }
+            })
+
+            if let deployments {
+                if deployments.isEmpty {
+                    CardPlaceholderText(text: String(localized: "Nothing here"))
+                } else {
+                    CardScrollList(items: deployments, onActivate: onOpen) { dep in
+                        HStack(spacing: 5) {
+                            Circle().fill(Color(hex: dep.accentHex)).frame(width: 5, height: 5)
+                            Text(dep.commitMessage ?? dep.url)
+                                .font(.system(size: 11))
+                                .foregroundColor(Color(hex: "#C5C8CD"))
+                                .lineLimit(1).truncationMode(.tail)
+                                .layoutPriority(1)
+                            Spacer(minLength: 4)
+                            Text(dep.timeAgo)
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "#6B7079"))
+                                .fixedSize()
+                        }
+                        .padding(.trailing, 4)
+                    }
+                    .padding(.top, 4)
+                    .padding(.leading, 108)
+                    .padding(.trailing, 8)
+                }
+            } else {
+                CardPlaceholderText(text: String(localized: "Loading…"))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.top, 4)
+        .clipped()
+        .onAppear { VercelPoller.shared.fetchDeployments(projectId: project.id) }
+        .onExitCommand { onBack() }
+    }
+}
+
                     HStack(spacing: 5) {
                         Circle().fill(accent).frame(width: 5, height: 5)
                         Text(first.recipientShort)

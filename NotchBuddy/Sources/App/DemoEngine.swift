@@ -359,6 +359,11 @@ final class DemoEngine: ObservableObject {
             CalcomBooking(id: 1002, title: "Onboarding call",
                           startTime: tomorrowNoon,
                           endTime: tomorrowNoon.addingTimeInterval(1800),
+        s.vercelProjects = [
+            VercelProject(id: "prj_demo1", name: "my-app", updatedAt: now.addingTimeInterval(-1800),
+                          latestState: "READY", productionURL: "my-app.vercel.app"),
+        ]
+        s.vercelProjectDeployments = ["prj_demo1": s.vercelDeployments]
                           status: "ACCEPTED",
                           attendeeName: "Bob Chen",
                           attendeeEmail: "bob@example.com",

@@ -45,6 +45,8 @@ final class AppState: ObservableObject {
     @Published var cardSelection: Int? = nil
     // Number of navigable items in the card currently on screen (0 = no list)
     @Published var cardItemCount: Int = 0
+    // The CardScrollList that set cardItemCount, so a list leaving after the next one appeared doesn't zero it
+    var cardListOwner: UUID? = nil
 
     // Upload progress (0-1) — set to 1.0 only at completion; animation is time-based
     @Published var uploadProgress: Double = 0
@@ -372,6 +374,9 @@ final class AppState: ObservableObject {
 
     // Vercel deployments (populated by VercelPoller)
     @Published var vercelDeployments: [VercelDeployment] = []
+    // Vercel projects and each opened project's deployments, keyed by project id
+    @Published var vercelProjects: [VercelProject] = []
+    @Published var vercelProjectDeployments: [String: [VercelDeployment]] = [:]
 
     // Resend emails (populated by ResendPoller)
     @Published var resendEmails: [ResendEmail] = []
@@ -819,13 +824,49 @@ struct VercelDeployment: Identifiable {
     let branch: String?
 
     var isSuccess: Bool { state == "READY" }
-    var statusLabel: String { isSuccess ? "Ready" : (state == "CANCELED" ? "Canceled" : "Error") }
-    var timeAgo: String {
-        let diff = Date().timeIntervalSince(createdAt)
-        if diff < 60    { return "just now" }
-        if diff < 3600  { return "\(Int(diff/60))m" }
-        if diff < 86400 { return "\(Int(diff/3600))h" }
-        return "\(Int(diff/86400))d"
+    var isInProgress: Bool { ["BUILDING", "QUEUED", "INITIALIZING"].contains(state) }
+    var statusLabel: String {
+        if isSuccess { return "Ready" }
+        switch state {
+        case "CANCELED":              return "Canceled"
+        case "BUILDING":              return "Building"
+        case "QUEUED", "INITIALIZING": return "Queued"
+        default:                      return "Error"
+        }
+    }
+    /// Green when ready, amber while building, grey when canceled, red on error.
+    var accentHex: String {
+        if isSuccess { return "#22C55E" }
+        if isInProgress { return "#F5A524" }
+        if state == "CANCELED" { return "#6B7079" }
+        return "#F4505E"
+    }
+    var timeAgo: String { shortTimeAgo(createdAt) }
+}
+
+/// "just now", "5m", "3h", "2d": the short age the notch cards print.
+func shortTimeAgo(_ date: Date) -> String {
+    let diff = Date().timeIntervalSince(date)
+    if diff < 60    { return "just now" }
+    if diff < 3600  { return "\(Int(diff/60))m" }
+    if diff < 86400 { return "\(Int(diff/3600))h" }
+    return "\(Int(diff/86400))d"
+}
+
+struct VercelProject: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let updatedAt: Date
+    let latestState: String?      // readyState of the latest deployment, nil when never deployed
+    let productionURL: String?    // first production alias, without scheme
+
+    var accentHex: String {
+        switch latestState {
+        case "READY":                             return "#22C55E"
+        case "BUILDING", "QUEUED", "INITIALIZING": return "#F5A524"
+        case "ERROR":                             return "#F4505E"
+        default:                                  return "#6B7079"
+        }
     }
 }
 
