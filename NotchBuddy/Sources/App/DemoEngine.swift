@@ -51,6 +51,10 @@ final class DemoEngine: ObservableObject {
         var noteMessage: String?
         // Integration data
         var vercelDeployments: [VercelDeployment]
+        var vercelProjects: [VercelProject]
+        var vercelProjectDeployments: [String: [VercelDeployment]]
+        var githubRepos: [GitHubRepo]
+        var githubRepoRuns: [String: [GitHubWorkflowRun]]
         var resendEmails: [ResendEmail]
         var resendTotal: Int?
         var githubPulse: GitHubPulse?
@@ -97,6 +101,10 @@ final class DemoEngine: ObservableObject {
             isPinned:            s.isPinned,
             noteMessage:         s.noteMessage,
             vercelDeployments:   s.vercelDeployments,
+            vercelProjects:      s.vercelProjects,
+            vercelProjectDeployments: s.vercelProjectDeployments,
+            githubRepos:         s.githubRepos,
+            githubRepoRuns:      s.githubRepoRuns,
             resendEmails:        s.resendEmails,
             resendTotal:         s.resendTotal,
             githubPulse:         s.githubPulse,
@@ -206,6 +214,10 @@ final class DemoEngine: ObservableObject {
 
         // Restore integration data
         s.vercelDeployments    = snap.vercelDeployments
+        s.vercelProjects       = snap.vercelProjects
+        s.vercelProjectDeployments = snap.vercelProjectDeployments
+        s.githubRepos          = snap.githubRepos
+        s.githubRepoRuns       = snap.githubRepoRuns
         s.resendEmails         = snap.resendEmails
         s.resendTotal          = snap.resendTotal
         s.githubPulse          = snap.githubPulse
@@ -281,6 +293,20 @@ final class DemoEngine: ObservableObject {
 
         // GitHub
         s.githubStats = GitHubStats(totalRepos: 34, totalStars: 127)
+        s.githubRepos = [
+            GitHubRepo(fullName: "me/my-app", name: "my-app", url: "https://github.com/me/my-app",
+                       isPrivate: false, pushedAt: now.addingTimeInterval(-1800)),
+            GitHubRepo(fullName: "me/landing", name: "landing", url: "https://github.com/me/landing",
+                       isPrivate: true, pushedAt: now.addingTimeInterval(-86400)),
+        ]
+        s.githubRepoRuns = [
+            "me/my-app": [
+                GitHubWorkflowRun(id: 1, title: "feat: auth refactor", workflow: "CI", branch: "main",
+                                  status: "completed", conclusion: "success",
+                                  url: "https://github.com/me/my-app/actions", createdAt: now.addingTimeInterval(-1800)),
+            ],
+            "me/landing": [],
+        ]
         s.githubPulse = GitHubPulse(
             login: "demo-user",
             myPRs: [
@@ -333,6 +359,11 @@ final class DemoEngine: ObservableObject {
                              createdAt: now.addingTimeInterval(-86400),
                              commitMessage: "fix: mobile nav", branch: "main"),
         ]
+        s.vercelProjects = [
+            VercelProject(id: "prj_demo1", name: "my-app", updatedAt: now.addingTimeInterval(-1800),
+                          latestState: "READY", productionURL: "my-app.vercel.app"),
+        ]
+        s.vercelProjectDeployments = ["prj_demo1": s.vercelDeployments]
 
         // Resend
         s.resendTotal = 1284
@@ -359,11 +390,6 @@ final class DemoEngine: ObservableObject {
             CalcomBooking(id: 1002, title: "Onboarding call",
                           startTime: tomorrowNoon,
                           endTime: tomorrowNoon.addingTimeInterval(1800),
-        s.vercelProjects = [
-            VercelProject(id: "prj_demo1", name: "my-app", updatedAt: now.addingTimeInterval(-1800),
-                          latestState: "READY", productionURL: "my-app.vercel.app"),
-        ]
-        s.vercelProjectDeployments = ["prj_demo1": s.vercelDeployments]
                           status: "ACCEPTED",
                           attendeeName: "Bob Chen",
                           attendeeEmail: "bob@example.com",

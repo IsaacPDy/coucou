@@ -386,6 +386,9 @@ final class AppState: ObservableObject {
     @Published var githubStats: GitHubStats? = nil
     @Published var githubPulse: GitHubPulse? = nil
     @Published var githubActivity: GitHubActivity? = nil
+    // Owned repos (most recently pushed first) and each opened repo's Actions runs, keyed by "owner/name"
+    @Published var githubRepos: [GitHubRepo] = []
+    @Published var githubRepoRuns: [String: [GitHubWorkflowRun]] = [:]
 
     // Stripe (populated by StripePoller)
     @Published var stripePayments: [StripePayment] = []
@@ -908,6 +911,35 @@ struct ResendEmail: Identifiable {
 struct GitHubStats {
     let totalRepos: Int
     let totalStars: Int
+}
+
+struct GitHubRepo: Identifiable, Equatable {
+    var id: String { fullName }
+    let fullName: String        // "owner/name"
+    let name: String
+    let url: String
+    let isPrivate: Bool
+    let pushedAt: Date
+}
+
+struct GitHubWorkflowRun: Identifiable, Equatable {
+    let id: Int
+    let title: String           // commit or PR title the run was triggered by
+    let workflow: String
+    let branch: String
+    let status: String          // "queued", "in_progress", "completed", …
+    let conclusion: String?     // "success", "failure", "cancelled", … when completed
+    let url: String
+    let createdAt: Date
+
+    var accentHex: String {
+        guard status == "completed" else { return "#F5A524" }
+        switch conclusion {
+        case "success":                       return "#22C55E"
+        case "failure", "timed_out", "startup_failure": return "#F4505E"
+        default:                              return "#6B7079"
+        }
+    }
 }
 
 // MARK: - Stripe

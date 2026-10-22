@@ -194,7 +194,11 @@ struct OverviewView: View {
             #if !APPSTORE
             withAnimation(.easeIn(duration: 0.16)) { state.showingPlanDetail = false }
             #endif
-            if new == "integration_github" { GithubPoller.shared.refreshIfStale() }
+            if new == "integration_github" {
+                GithubPoller.shared.refreshIfStale()
+                GithubPoller.shared.refreshReposIfEmpty()
+            }
+            if new == "integration_vercel" { VercelPoller.shared.refreshProjectsIfStale() }
         }
         #if !APPSTORE
         .onChange(of: state.view) { _, v in
@@ -1898,6 +1902,10 @@ struct IntegrationCardView: View {
     var onDiffTap: ((Int) -> Void)? = nil
     @ObservedObject private var appState = AppState.shared
     @State private var githubDetailSection: GitHubDetailSection = .myPRs
+    // Drill-down inside the Vercel and GitHub cards (shown while showingDetail is on)
+    @State private var vercelProjectId: String? = nil
+    @State private var vercelDeploymentId: String? = nil
+    @State private var githubRepoName: String? = nil
     #if !APPSTORE
     @ObservedObject private var mailController = MailController.shared
     #endif
@@ -2034,6 +2042,24 @@ struct IntegrationCardView: View {
     // Vercel with recent deployments
     private var vercelHasActivity: Bool {
         task.id == "integration_vercel" && !appState.vercelDeployments.isEmpty
+    }
+
+    // Vercel projects, narrowed to the projects picked in Settings (none picked = all)
+    private var vercelProjects: [VercelProject] {
+        guard task.id == "integration_vercel" else { return [] }
+        let filter = appState.vercelProjectFilter
+        return filter.isEmpty ? appState.vercelProjects
+                              : appState.vercelProjects.filter { filter.contains($0.name) }
+    }
+
+    private var openVercelProject: VercelProject? {
+        guard task.id == "integration_vercel", showingDetail, let id = vercelProjectId else { return nil }
+        return appState.vercelProjects.first { $0.id == id }
+    }
+
+    private var openGitHubRepo: GitHubRepo? {
+        guard task.id == "integration_github", showingDetail, let name = githubRepoName else { return nil }
+        return appState.githubRepos.first { $0.fullName == name }
     }
 
     // Resend with recent emails
@@ -2182,32 +2208,6 @@ struct IntegrationCardView: View {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = false }
             }
             .transition(.opacity)
-        } else if showingDetail && vercelHasActivity {
-            VercelDetailView(deployment: appState.vercelDeployments[0]) {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = false }
-            }
-            .transition(.opacity)
-        } else if vercelHasActivity {
-            VercelDeploymentListView(deployments: appState.vercelDeployments, onOpenDetail: {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = true }
-            })
-            .transition(.opacity)
-        } else if resendHasData {
-            ResendCardView(emails: appState.resendEmails, total: appState.resendTotal)
-                .transition(.opacity)
-        } else if showingDetail && githubHasPulse {
-            GitHubDetailView(
-                section: githubDetailSection,
-                pulse: appState.githubPulse!,
-                activity: appState.githubActivity,
-                stats: appState.githubStats,
-                onBack: {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = false }
-                }
-            )
-            .transition(.opacity)
-        } else if githubHasPulse {
-            GitHubPulseCardView(
         } else if let project = openVercelProject {
             if let dep = appState.vercelProjectDeployments[project.id]?.first(where: { $0.id == vercelDeploymentId }) {
                 VercelDetailView(deployment: dep) {
@@ -2234,6 +2234,54 @@ struct IntegrationCardView: View {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = true }
             })
             .transition(.opacity)
+        } else if showingDetail && vercelHasActivity {
+            VercelDetailView(deployment: appState.vercelDeployments[0]) {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = false }
+            }
+            .transition(.opacity)
+        } else if vercelHasActivity {
+            VercelDeploymentListView(deployments: appState.vercelDeployments, onOpenDetail: {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = true }
+            })
+            .transition(.opacity)
+        } else if resendHasData {
+            ResendCardView(emails: appState.resendEmails, total: appState.resendTotal)
+                .transition(.opacity)
+        } else if let repo = openGitHubRepo {
+            GitHubRepoRunsView(repo: repo, runs: appState.githubRepoRuns[repo.fullName], onBack: {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = false }
+                githubRepoName = nil
+            })
+            .transition(.opacity)
+        } else if showingDetail && githubHasPulse {
+            GitHubDetailView(
+                section: githubDetailSection,
+                pulse: appState.githubPulse!,
+                activity: appState.githubActivity,
+                stats: appState.githubStats,
+                onBack: {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = false }
+                }
+            )
+            .transition(.opacity)
+        } else if task.id == "integration_github" && !appState.githubRepos.isEmpty {
+            GitHubRepoListView(
+                repos: appState.githubRepos,
+                pulse: appState.githubPulse,
+                activity: appState.githubActivity,
+                onTapSection: { section in
+                    githubDetailSection = section
+                    githubRepoName = nil
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = true }
+                },
+                onOpenRepo: { repo in
+                    githubRepoName = repo.fullName
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { showingDetail = true }
+                }
+            )
+            .transition(.opacity)
+        } else if githubHasPulse {
+            GitHubPulseCardView(
                 pulse: appState.githubPulse!,
                 stats: appState.githubStats,
                 activity: appState.githubActivity,
@@ -2686,54 +2734,6 @@ struct VercelDetailView: View {
     }
 }
 
-// MARK: - Resend Card View
-
-struct ResendPulseDot: View {
-    @State private var on = false
-    var body: some View {
-        Circle()
-            .fill(Color(hex: "#22C55E"))
-            .frame(width: 4, height: 4)
-            .opacity(on ? 1 : 0.2)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { on = true }
-            }
-    }
-}
-
-struct ResendCardView: View {
-    let emails: [ResendEmail]
-    let total: Int?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color(hex: "#22C55E"))
-                    .frame(width: 7, height: 7)
-                Text("Resend")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(hex: "#F5F6F8"))
-                Text("Emails")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(hex: "#8E939C"))
-                if let total {
-                    ResendPulseDot()
-                    Text("\(total)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(Color(hex: "#C5C8CD"))
-                        .monospacedDigit()
-                }
-            }
-            .padding(.top, 6)
-            .padding(.leading, 108)
-            .padding(.trailing, 36)
-
-            // Email rows — first is highlighted, rest plain (same structure as Vercel list)
-            VStack(alignment: .leading, spacing: 3) {
-                if let first = emails.first {
-                    let accent = Color(hex: first.isDelivered ? "#22C55E" : "#F4505E")
 // MARK: - Card Scroll List
 
 /// A scrolling list of 20 pt rows for an integration card: three rows show, the
@@ -2967,6 +2967,54 @@ struct VercelProjectDeploymentsView: View {
     }
 }
 
+// MARK: - Resend Card View
+
+struct ResendPulseDot: View {
+    @State private var on = false
+    var body: some View {
+        Circle()
+            .fill(Color(hex: "#22C55E"))
+            .frame(width: 4, height: 4)
+            .opacity(on ? 1 : 0.2)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { on = true }
+            }
+    }
+}
+
+struct ResendCardView: View {
+    let emails: [ResendEmail]
+    let total: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color(hex: "#22C55E"))
+                    .frame(width: 7, height: 7)
+                Text("Resend")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(hex: "#F5F6F8"))
+                Text("Emails")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(hex: "#8E939C"))
+                if let total {
+                    ResendPulseDot()
+                    Text("\(total)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color(hex: "#C5C8CD"))
+                        .monospacedDigit()
+                }
+            }
+            .padding(.top, 6)
+            .padding(.leading, 108)
+            .padding(.trailing, 36)
+
+            // Email rows — first is highlighted, rest plain (same structure as Vercel list)
+            VStack(alignment: .leading, spacing: 3) {
+                if let first = emails.first {
+                    let accent = Color(hex: first.isDelivered ? "#22C55E" : "#F4505E")
                     HStack(spacing: 5) {
                         Circle().fill(accent).frame(width: 5, height: 5)
                         Text(first.recipientShort)
@@ -3562,6 +3610,169 @@ private struct GitHubRepoCIRowView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - GitHub Repo List View
+
+struct GitHubRepoListView: View {
+    let repos: [GitHubRepo]
+    let pulse: GitHubPulse?
+    let activity: GitHubActivity?
+    let onTapSection: (GitHubDetailSection) -> Void
+    let onOpenRepo: (GitHubRepo) -> Void
+
+    /// Default-branch CI of the recently pushed repos the pulse tracks.
+    private func ci(for repo: GitHubRepo) -> CIState {
+        pulse?.mainCI.first(where: { $0.repo == repo.fullName })?.ci ?? .unknown
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: title, then PRs / to review / last 7 days, each opening its detail
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color(hex: "#F4505E"))
+                    .frame(width: 7, height: 7)
+                Text("GitHub")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(hex: "#F5F6F8"))
+                    .fixedSize()
+                if let pulse {
+                    headerChip(icon: "arrow.triangle.pull",
+                               color: ciColor(ciWorstState(pulse.myPRs)),
+                               count: pulse.myPRs.count) { onTapSection(.myPRs) }
+                    headerChip(icon: "eye",
+                               color: pulse.toReview.isEmpty ? "#6B7079" : "#8AB4F8",
+                               count: pulse.toReview.count) { onTapSection(.toReview) }
+                }
+                if let act = activity {
+                    Button(action: { onTapSection(.activity) }) {
+                        HStack(spacing: 1.5) {
+                            ForEach(act.lastDays(7), id: \.date) { day in
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(contributionColor(day.level))
+                                    .frame(width: 5, height: 5)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 6)
+            .padding(.leading, 108)
+            .padding(.trailing, 36)
+
+            CardScrollList(items: repos, onActivate: onOpenRepo) { repo in
+                let state = ci(for: repo)
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(ghCIDot(state))
+                        .frame(width: 5, height: 5)
+                        .opacity(state == .unknown ? 0 : 1)
+                    Text(repo.name)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color(hex: "#C5C8CD"))
+                        .lineLimit(1).truncationMode(.tail)
+                        .layoutPriority(1)
+                    if repo.isPrivate {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 7))
+                            .foregroundColor(Color(hex: "#6B7079"))
+                    }
+                    Spacer(minLength: 4)
+                    Text(shortTimeAgo(repo.pushedAt))
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(hex: "#6B7079"))
+                        .fixedSize()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundColor(Color(hex: "#4A4F57"))
+                }
+                .padding(.trailing, 4)
+            }
+            .padding(.top, 4)
+            .padding(.leading, 108)
+            .padding(.trailing, 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.top, 4)
+        .clipped()
+    }
+
+    private func headerChip(icon: String, color: String, count: Int,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(hex: color))
+                Text("\(count)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(hex: "#C5C8CD"))
+                    .monospacedDigit()
+            }
+            .fixedSize()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - GitHub Repo Runs View
+
+struct GitHubRepoRunsView: View {
+    let repo: GitHubRepo
+    let runs: [GitHubWorkflowRun]?     // nil while loading
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CardDrillHeader(title: repo.name, onBack: onBack, onOpen: {
+                if let url = safeWebURL(repo.url), url.host == "github.com" { NSWorkspace.shared.open(url) }
+            })
+
+            if let runs {
+                if runs.isEmpty {
+                    CardPlaceholderText(text: String(localized: "Nothing here"))
+                } else {
+                    CardScrollList(items: runs, onActivate: { run in
+                        if let url = safeWebURL(run.url), url.host == "github.com" { NSWorkspace.shared.open(url) }
+                    }) { run in
+                        HStack(spacing: 5) {
+                            Circle().fill(Color(hex: run.accentHex)).frame(width: 5, height: 5)
+                            Text(run.title)
+                                .font(.system(size: 11))
+                                .foregroundColor(Color(hex: "#C5C8CD"))
+                                .lineLimit(1).truncationMode(.tail)
+                            Spacer(minLength: 4)
+                            Text(run.branch)
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "#9398A1"))
+                                .lineLimit(1).truncationMode(.tail)
+                                .frame(maxWidth: 56, alignment: .trailing)
+                                .layoutPriority(1)
+                            Text(shortTimeAgo(run.createdAt))
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "#6B7079"))
+                                .fixedSize()
+                        }
+                        .padding(.trailing, 4)
+                    }
+                    .padding(.top, 4)
+                    .padding(.leading, 108)
+                    .padding(.trailing, 8)
+                }
+            } else {
+                CardPlaceholderText(text: String(localized: "Loading…"))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.top, 4)
+        .clipped()
+        .onAppear { GithubPoller.shared.fetchRuns(repo: repo.fullName) }
+        .onExitCommand { onBack() }
     }
 }
 

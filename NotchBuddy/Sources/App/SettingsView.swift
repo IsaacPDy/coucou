@@ -2083,13 +2083,14 @@ struct SettingsView: View {
         saveKey("resend-from",     value: resendFrom)
         saveKey("n8n-url",         value: n8nUrl)
         saveKey("n8n-api-key",     value: n8nKey)
+        let prevVercelToken = KeychainStore.shared.get("vercel-token")
         saveKey("vercel-token",    value: vercelToken)
-
         if KeychainStore.shared.get("vercel-token") != prevVercelToken {
             AppState.shared.vercelProjects = []
             AppState.shared.vercelProjectDeployments = [:]
             VercelPoller.shared.refreshProjectsIfStale(maxAge: 0)
         }
+
         // Detect GitHub token changes before writing
         let prevGithubToken = KeychainStore.shared.get("github-token")
         saveKey("github-token", value: githubToken)
@@ -2097,9 +2098,9 @@ struct SettingsView: View {
         if nextGithubToken != prevGithubToken {
             AppState.shared.githubPulse = nil
             AppState.shared.githubActivity = nil
-            if nextGithubToken == nil { AppState.shared.githubStats = nil }
             AppState.shared.githubRepos = []
             AppState.shared.githubRepoRuns = [:]
+            if nextGithubToken == nil { AppState.shared.githubStats = nil }
             if nextGithubToken != nil {
                 GithubPoller.shared.triggerPulseNow()
                 GithubPoller.shared.refreshActivityIfStale()

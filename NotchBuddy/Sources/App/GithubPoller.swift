@@ -65,12 +65,15 @@ final class GithubPoller: @unchecked Sendable {
             let privateOwned = (json["owned_private_repos"] as? Int)
                             ?? (json["total_private_repos"] as? Int)
                             ?? 0
-            self.fetchStars(token: token, totalRepos: publicRepos + privateOwned)
+            let login = (json["login"] as? String) ?? ""
+            self.fetchStars(token: token, login: login, totalRepos: publicRepos + privateOwned)
         }.resume()
     }
 
-    private func fetchStars(token: String, totalRepos: Int) {
-        guard let url = URL(string: "https://api.github.com/user/repos?per_page=100&affiliation=owner&sort=pushed") else { return }
+    /// Lists the repos the user owns or reaches through an organization (most recently
+    /// pushed first): they feed the notch repo list, and the owned ones the star count.
+    private func fetchStars(token: String, login: String, totalRepos: Int) {
+        guard let url = URL(string: "https://api.github.com/user/repos?per_page=100&affiliation=owner,organization_member&sort=pushed") else { return }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -80,10 +83,73 @@ final class GithubPoller: @unchecked Sendable {
             guard let data, code == 200,
                   let repos = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
 
-            let totalStars = repos.reduce(0) { $0 + (($1["stargazers_count"] as? Int) ?? 0) }
+            let owned = repos.filter {
+                (($0["owner"] as? [String: Any])?["login"] as? String)?.caseInsensitiveCompare(login) == .orderedSame
+            }
+            let totalStars = owned.reduce(0) { $0 + (($1["stargazers_count"] as? Int) ?? 0) }
+            let list = repos.compactMap(Self.parseRepo)
             DispatchQueue.main.async {
                 AppState.shared.githubStats = GitHubStats(totalRepos: totalRepos, totalStars: totalStars)
+                AppState.shared.setIfChanged(\.githubRepos, list)
             }
+        }.resume()
+    }
+
+    private static func parseRepo(_ r: [String: Any]) -> GitHubRepo? {
+        guard (r["archived"] as? Bool) != true,
+              let fullName = r["full_name"] as? String,
+              let name = r["name"] as? String,
+              let url = r["html_url"] as? String else { return nil }
+        let pushedAt = (r["pushed_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? .distantPast
+        return GitHubRepo(fullName: fullName, name: name, url: url,
+                          isPrivate: (r["private"] as? Bool) ?? false, pushedAt: pushedAt)
+    }
+
+    /// Loads the repo list right away when the card opens before the first stats poll.
+    func refreshReposIfEmpty() {
+        DispatchQueue.main.async {
+            guard AppState.shared.githubRepos.isEmpty else { return }
+            DispatchQueue.global(qos: .userInitiated).async { GithubPoller.shared.pollStats() }
+        }
+    }
+
+    // MARK: - Repo runs (on demand)
+
+    /// Fetches the latest GitHub Actions runs of one repo ("owner/name").
+    func fetchRuns(repo: String) {
+        guard !DemoEngine.isPollerPaused,
+              let token = KeychainStore.shared.get("github-token"),
+              let url = URL(string: "https://api.github.com/repos/\(repo)/actions/runs?per_page=20") else { return }
+        var req = URLRequest(url: url, timeoutInterval: 15)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        URLSession.shared.dataTask(with: req) { [weak self] data, response, _ in
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            // 403/404: the token can't read Actions on this repo — show it as having no runs.
+            var runs: [GitHubWorkflowRun] = []
+            if let data, code == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let raw = json["workflow_runs"] as? [[String: Any]] {
+                let iso = ISO8601DateFormatter()
+                runs = raw.compactMap { r in
+                    guard let id = r["id"] as? Int,
+                          let url = r["html_url"] as? String else { return nil }
+                    let workflow = (r["name"] as? String) ?? ""
+                    return GitHubWorkflowRun(
+                        id: id,
+                        title: (r["display_title"] as? String) ?? workflow,
+                        workflow: workflow,
+                        branch: (r["head_branch"] as? String) ?? "",
+                        status: (r["status"] as? String) ?? "",
+                        conclusion: r["conclusion"] as? String,
+                        url: url,
+                        createdAt: (r["created_at"] as? String).flatMap { iso.date(from: $0) } ?? .distantPast)
+                }
+            } else {
+                self?.nbLog("runs \(repo) HTTP \(code)")
+            }
+            DispatchQueue.main.async { AppState.shared.githubRepoRuns[repo] = runs }
         }.resume()
     }
 
