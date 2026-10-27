@@ -385,8 +385,12 @@ final class AIUsageMonitor: ObservableObject {
     static let shared = AIUsageMonitor()
     nonisolated static let pillId = "integration_usage"
 
-    @Published private(set) var claude: ProviderUsage?
-    @Published private(set) var codex: ProviderUsage?
+    @Published private(set) var claude: ProviderUsage? {
+        didSet { PlanHistory.shared.record(claude) }
+    }
+    @Published private(set) var codex: ProviderUsage? {
+        didSet { PlanHistory.shared.record(codex) }
+    }
     @Published private(set) var antigravity: [ProviderUsage] = []
     @Published private(set) var lastRefresh: Date?
     /// Show what's left instead of what's used (the button beside refresh). Persisted.

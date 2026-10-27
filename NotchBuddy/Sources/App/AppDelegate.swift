@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupIsland()
         MachineVitals.shared.start()
         #if !APPSTORE
+        // The Stats page's "last app you used": Coucou is in front while you look at it.
+        MemoryMonitor.shared.trackFrontApp()
         // Opened by hand (Finder, Dock, Spotlight): the Coucou window shows. Not at login.
         if HubController.openAtLaunch && !HubController.launchedAtLogin() {
             Task { @MainActor in

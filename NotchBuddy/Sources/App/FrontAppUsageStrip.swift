@@ -34,7 +34,7 @@ final class FrontAppUsageStrip {
     private var hideTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
-    private static let panelSize = NSSize(width: 300, height: 30)
+    private static let panelSize = NSSize(width: 380, height: 30)
     private let gap: CGFloat = 4
 
     private init() {}

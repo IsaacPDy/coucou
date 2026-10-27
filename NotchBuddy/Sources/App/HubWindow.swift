@@ -3,17 +3,19 @@ import AppKit
 import Carbon
 import SwiftUI
 
-/// The pages of the Coucou window: the notch's settings.
+/// The pages of the Coucou window: your stats and the notch's settings.
 enum HubPage: String, CaseIterable, Identifiable {
-    case general, pills, agents, chat, integrations, voice, shortcuts
+    case stats, general, pills, agents, chat, integrations, voice, shortcuts
 
     var id: String { rawValue }
 
+    static let insightPages: [HubPage] = [.stats]
     static let notchPages: [HubPage] = [.general, .pills, .agents, .chat, .integrations, .voice, .shortcuts]
 
     /// The section of Settings this page shows, for the notch's pages.
     var settingsSection: String {
         switch self {
+        case .stats:        return "stats"
         case .general:      return "general"
         case .pills:        return "activepills"
         case .agents:       return "agents"
@@ -31,6 +33,7 @@ enum HubPage: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .stats:        return String(localized: "Stats")
         case .general:      return String(localized: "General")
         case .pills:        return String(localized: "Active pills")
         case .agents:       return String(localized: "Agents")
@@ -43,6 +46,7 @@ enum HubPage: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .stats:        return "chart.bar.xaxis"
         case .general:      return "gearshape"
         case .pills:        return "square.grid.2x2"
         case .agents:       return "terminal"
@@ -90,6 +94,7 @@ extension HubPage {
     /// The line under the title of the notch's pages.
     static func notchSubtitle(_ page: HubPage) -> String {
         switch page {
+        case .stats:        return String(localized: "What your agents did, your plan usage and memory. Counted on your Mac, never sent anywhere.")
         case .general:      return String(localized: "hub.notch.general")
         case .pills:        return String(localized: "hub.notch.pills")
         case .agents:       return String(localized: "hub.notch.agents")
@@ -204,8 +209,12 @@ struct HubView: View {
             HubHero(page: router.page, title: router.page.title, subtitle: HubPage.notchSubtitle(router.page))
                 .padding(.horizontal, 28)
                 .padding(.top, 24)
-            SettingsView(embeddedSection: router.page.settingsSection)
-                .id(router.page)
+            if router.page == .stats {
+                HubStatsPage()
+            } else {
+                SettingsView(embeddedSection: router.page.settingsSection)
+                    .id(router.page)
+            }
         }
     }
 }
@@ -232,7 +241,12 @@ private struct HubSidebar: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
+                    HubSidebarHeader(text: String(localized: "Insights"))
+                    ForEach(HubPage.insightPages) { page in
+                        HubSidebarItem(page: page, selected: router.page == page) { router.page = page }
+                    }
                     HubSidebarHeader(text: String(localized: "hub.section.notch"))
+                        .padding(.top, 14)
                     ForEach(HubPage.notchPages) { page in
                         HubSidebarItem(page: page, selected: router.page == page) { router.page = page }
                     }

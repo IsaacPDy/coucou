@@ -983,7 +983,9 @@ final class HookServer: @unchecked Sendable {
         }
         // The recap only counts allow / always / deny.
         let recapDecision = ["plan_auto": "allow", "plan_default": "allow", "plan_change": "deny"][decision] ?? decision
-        RecapStore.shared.recordDecision(pillId: head.pillId, decision: recapDecision)
+        RecapStore.shared.recordDecision(pillId: head.pillId, decision: recapDecision,
+                                         sessionId: head.sessionId.isEmpty ? nil : head.sessionId,
+                                         tool: head.tool, command: head.command, received: head.received)
         removeApproval(id: head.id, answer: json)
         if decision == "plan_change" { ClaudeHost.activate(head.hostApp) }
     }

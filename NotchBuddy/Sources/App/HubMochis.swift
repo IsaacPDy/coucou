@@ -233,6 +233,9 @@ struct HubHeroTheme {
             HubMochiSpec(color: color, size: size, outfit: outfit, state: state, roams: roams, start: start)
         }
         switch page {
+        case .stats:
+            return .init(color: Color(hex: "#34D399"), cast: [m("#34D399", 54, 0.2, outfit: .roundGlasses, state: .thinking, roams: false),
+                                                               m("#3B9EFF", 46, 0.6), m("#FB923C", 42, 0.95)])
         case .general:
             return .init(color: Color(hex: "#8E939C"), cast: [m("#F5F6F8", 60, 0.4, outfit: .scarf), m("#FB923C", 46, 0.85)])
         case .pills:

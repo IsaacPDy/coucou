@@ -12,18 +12,29 @@ struct RecapTurn: Codable {
     var linesRemoved: Int
     var commandsRun: Int
     var questions: Int
+    // Added in schema 2; nil in turns recorded before.
+    var sessionId: String? = nil
+    /// Lines changed per file name (added + removed), the 20 biggest.
+    var files: [String: Int]? = nil
+    /// Seconds the turn spent waiting on a permission decision.
+    var waitSeconds: Double? = nil
 }
 
 struct RecapDecision: Codable {
     var pillId: String
     var date: Date
     var decision: String     // "allow", "always", "deny", "ask"
+    // Added in schema 2; nil in decisions recorded before.
+    var tool: String? = nil
+    var command: String? = nil
+    var waitSeconds: Double? = nil
+    var sessionId: String? = nil
 }
 
 private struct RecapData: Codable {
     var turns: [RecapTurn] = []
     var decisions: [RecapDecision] = []
-    var schemaVersion: Int = 1
+    var schemaVersion: Int = 2
 }
 
 // MARK: - Weekly summary
@@ -54,10 +65,32 @@ private struct TurnDraft {
     var start: Date
     var lastEvent: Date
     var changedPaths: Set<String> = []
+    var fileLines: [String: Int] = [:]
+    var waitSeconds: Double = 0
     var linesAdded: Int = 0
     var linesRemoved: Int = 0
     var commandsRun: Int = 0
     var questions: Int = 0
+}
+
+private extension TurnDraft {
+    func turn(sessionId: String, end: Date) -> RecapTurn {
+        let biggest = fileLines.sorted { $0.value > $1.value }.prefix(20)
+        return RecapTurn(
+            pillId: pillId,
+            project: project,
+            start: start,
+            end: end,
+            filesChanged: changedPaths.count,
+            linesAdded: linesAdded,
+            linesRemoved: linesRemoved,
+            commandsRun: commandsRun,
+            questions: questions,
+            sessionId: sessionId,
+            files: Dictionary(uniqueKeysWithValues: biggest.map { ($0.key, $0.value) }),
+            waitSeconds: waitSeconds
+        )
+    }
 }
 
 // MARK: - Store
@@ -108,6 +141,7 @@ final class RecapStore {
         guard isEnabled, var draft = drafts[sessionId] else { return }
         draft.lastEvent = .now
         draft.changedPaths.insert(path)
+        draft.fileLines[path, default: 0] += added + removed
         draft.linesAdded += added
         draft.linesRemoved += removed
         drafts[sessionId] = draft
@@ -123,18 +157,7 @@ final class RecapStore {
 
     func stop(sessionId: String) {
         guard isEnabled, let draft = drafts.removeValue(forKey: sessionId) else { return }
-        let turn = RecapTurn(
-            pillId: draft.pillId,
-            project: draft.project,
-            start: draft.start,
-            end: .now,
-            filesChanged: draft.changedPaths.count,
-            linesAdded: draft.linesAdded,
-            linesRemoved: draft.linesRemoved,
-            commandsRun: draft.commandsRun,
-            questions: draft.questions
-        )
-        data.turns.append(turn)
+        data.turns.append(draft.turn(sessionId: sessionId, end: .now))
         prune()
         save()
     }
@@ -143,12 +166,22 @@ final class RecapStore {
         drafts.removeValue(forKey: sessionId)
     }
 
-    func recordDecision(pillId: String, decision: String) {
+    /// `received` is when the request reached the notch, to count how long it waited on you.
+    func recordDecision(pillId: String, decision: String, sessionId: String? = nil,
+                        tool: String? = nil, command: String? = nil, received: Date? = nil) {
         guard isEnabled else { return }
-        data.decisions.append(RecapDecision(pillId: pillId, date: .now, decision: decision))
+        let wait = received.map { max(0, Date().timeIntervalSince($0)) }
+        if let sessionId, let wait { drafts[sessionId]?.waitSeconds += wait }
+        data.decisions.append(RecapDecision(pillId: pillId, date: .now, decision: decision,
+                                            tool: tool, command: command.map { String($0.prefix(200)) },
+                                            waitSeconds: wait, sessionId: sessionId))
         prune()
         save()
     }
+
+    /// Everything recorded, for the Stats page. Turns still in progress are left out.
+    var allTurns: [RecapTurn] { data.turns }
+    var allDecisions: [RecapDecision] { data.decisions }
 
     // MARK: - Query
 
@@ -260,7 +293,8 @@ final class RecapStore {
     }
 
     private func prune() {
-        guard let cutoff = Calendar.current.date(byAdding: .weekOfYear, value: -12, to: .now) else { return }
+        // A year, for the Stats page's streaks and records.
+        guard let cutoff = Calendar.current.date(byAdding: .weekOfYear, value: -52, to: .now) else { return }
         data.turns     = data.turns.filter     { $0.start >= cutoff }
         data.decisions = data.decisions.filter { $0.date  >= cutoff }
     }
@@ -271,18 +305,7 @@ final class RecapStore {
         let cutoff = Date().addingTimeInterval(-2 * 3600)
         var staleKeys: [String] = []
         for (key, draft) in drafts where draft.lastEvent < cutoff {
-            let turn = RecapTurn(
-                pillId: draft.pillId,
-                project: draft.project,
-                start: draft.start,
-                end: draft.lastEvent,
-                filesChanged: draft.changedPaths.count,
-                linesAdded: draft.linesAdded,
-                linesRemoved: draft.linesRemoved,
-                commandsRun: draft.commandsRun,
-                questions: draft.questions
-            )
-            data.turns.append(turn)
+            data.turns.append(draft.turn(sessionId: key, end: draft.lastEvent))
             staleKeys.append(key)
         }
         for key in staleKeys { drafts.removeValue(forKey: key) }
