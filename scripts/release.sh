@@ -95,8 +95,8 @@ if [ "$MODE" != "--finish" ]; then
   echo "$COMMIT" > "$COMMIT_FILE"
 
   # Signing comes from project.yml's Release config, which only the app target
-  # has. Set on the command line it would reach the Swift packages' targets too
-  # (FluidAudio), which have no team and fail with "requires a development team".
+  # has. Set on the command line it would reach any Swift package's targets too,
+  # which have no team and fail with "requires a development team".
   xcodebuild \
     -project NotchBuddy.xcodeproj \
     -scheme NotchBuddy \

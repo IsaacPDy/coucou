@@ -33,14 +33,8 @@ jobs:
       - name: Test approval queue
         run: bash scripts/test-approval-queue.sh
 
-      - name: Test Flow dictation keys
-        run: bash scripts/test-flow-keys.sh
-
-      - name: Test Flow text (snippets, dictionary, numbers)
-        run: bash scripts/test-flow-text.sh
-
-      - name: Test Notetaker transcript (speakers, echo, summary, Markdown)
-        run: bash scripts/test-notetaker.sh
+      - name: Test dictation transcript
+        run: bash scripts/test-dictation-transcript.sh
 
       - name: Test WhatsApp (gateway payloads, signatures, inbox, filters)
         run: bash scripts/test-whatsapp.sh

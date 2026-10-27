@@ -1,7 +1,7 @@
 import Foundation
 
 /// The words of one dictation, kept whole when Apple's recognizer loses some of them
-/// (tests/FlowKeyLogicTests.swift).
+/// (tests/DictationTranscriptTests.swift).
 ///
 /// On a long dictation the recognizer can:
 /// - start over after a pause: the next result holds only the new words;

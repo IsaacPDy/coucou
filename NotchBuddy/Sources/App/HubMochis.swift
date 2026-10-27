@@ -233,20 +233,6 @@ struct HubHeroTheme {
             HubMochiSpec(color: color, size: size, outfit: outfit, state: state, roams: roams, start: start)
         }
         switch page {
-        case .dictation:
-            return .init(color: Color(hex: "#FB923C"), cast: [m("#F5F6F8", 66, 0.2), m("#FB923C", 52, 0.65), m("#F472B6", 44, 0.95, outfit: .bow)])
-        case .notes:
-            return .init(color: Color(hex: "#3B9EFF"), cast: [m("#3B9EFF", 58, 0.1, outfit: .roundGlasses), m("#34D399", 50, 0.5), m("#A78BFA", 46, 0.9)])
-        case .insights:
-            return .init(color: Color(hex: "#34D399"), cast: [m("#F7B32B", 62, 0.3, outfit: .crown), m("#34D399", 48, 0.75), m("#F5F6F8", 40, 1)])
-        case .dictionary:
-            return .init(color: Color(hex: "#A78BFA"), cast: [m("#A78BFA", 60, 0.2, outfit: .roundGlasses), m("#F5F6F8", 48, 0.8, outfit: .beanie)])
-        case .snippets:
-            return .init(color: Color(hex: "#F7B32B"), cast: [m("#F7B32B", 56, 0.15, state: .working), m("#FB923C", 46, 0.6), m("#F5F6F8", 40, 0.95)])
-        case .styles:
-            return .init(color: Color(hex: "#F472B6"), cast: [m("#F472B6", 60, 0.25, outfit: .sunglasses), m("#F5F6F8", 48, 0.7, outfit: .bow), m("#22D3EE", 42, 1, outfit: .partyHat)])
-        case .settings:
-            return .init(color: Color(hex: "#8E939C"), cast: [m("#F5F6F8", 56, 0.3), m("#8E939C", 46, 0.95, state: .sleeping, roams: false)])
         case .general:
             return .init(color: Color(hex: "#8E939C"), cast: [m("#F5F6F8", 60, 0.4, outfit: .scarf), m("#FB923C", 46, 0.85)])
         case .pills:
@@ -464,52 +450,6 @@ struct HubHeroBackdrop: View {
                 }
             }
         }
-    }
-}
-
-/// A card in a colour (the Notetaker's, a setup to do): the bands' deep black, their particles
-/// and their light following the pointer.
-struct HubGlowCard<Content: View>: View {
-    let color: Color
-    var padding: CGFloat = 20
-    @ViewBuilder var content: () -> Content
-    @StateObject private var light = HubHeroLight()
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) { content() }
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(HubHeroBackdrop(color: color, light: light, cornerRadius: 14).allowsHitTesting(false))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(color.opacity(0.18)))
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let point): light.target = point
-                case .ended:             light.target = nil
-                }
-            }
-    }
-}
-
-/// An empty page: a Mochi asleep, and a line.
-struct HubEmptyState: View {
-    let text: String
-    var state: BotState = .sleeping
-    var color = "#F5F6F8"
-
-    var body: some View {
-        VStack(spacing: 10) {
-            HubLiveMochi(color: color, size: 54, state: state)
-                .frame(height: 54)
-            Text(text)
-                .font(.system(size: 13.5))
-                .foregroundColor(HubTheme.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 380)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
     }
 }
 #endif

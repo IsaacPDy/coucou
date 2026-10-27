@@ -137,7 +137,7 @@ struct SettingsView: View {
 
     // Sidebar selection persisted across sessions
     @AppStorage("settingsSection") private var selectedSection: String = "general"
-    /// Shown inside the Coucou Flow window (GitHub build): one section, without this window's
+    /// Shown inside the Coucou window (GitHub build): one section, without this window's
     /// sidebar, as the window has its own.
     private var embeddedSection: String? = nil
     private var section: String { embeddedSection ?? selectedSection }
@@ -150,6 +150,10 @@ struct SettingsView: View {
     #endif
     @AppStorage(ClaudeHost.terminalCardsKey) private var terminalCardsEnabled = false
     @State private var customSoundCount = SoundEngine.shared.customized.count
+    #if !APPSTORE
+    @State private var showInDock = HubController.showInDock
+    @State private var openAtLaunch = HubController.openAtLaunch
+    #endif
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
@@ -358,6 +362,13 @@ struct SettingsView: View {
                         .frame(width: 48)
                     Text("min without movement")
                 }
+                #if !APPSTORE
+                Toggle(String(localized: "hub.settings.dock"),
+                       isOn: Binding(get: { showInDock }, set: { showInDock = $0; HubController.showInDock = $0 }))
+                    .help(String(localized: "hub.settings.dock-detail"))
+                Toggle(String(localized: "hub.settings.open-at-launch"),
+                       isOn: Binding(get: { openAtLaunch }, set: { openAtLaunch = $0; HubController.openAtLaunch = $0 }))
+                #endif
             }
             .padding(6)
         }
@@ -1410,9 +1421,6 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var voiceSection: some View {
-        // Flow dictation: hold a key anywhere, speak, the words are pasted where you type.
-        FlowSettingsBox()
-
         // Claude is Coucou's brain: no model, language or feature switches any more,
         // only the wake word, the Anthropic key it needs, and Coucou's voice.
         GroupBox(String(localized: "«\u{202F}OK Coucou\u{202F}» — voice wake word")) {
@@ -2461,7 +2469,7 @@ struct ShortcutRecorderButton: View {
 }
 
 extension SettingsView {
-    /// One section of Settings, for the Coucou Flow window.
+    /// One section of Settings, for the Coucou window.
     init(embeddedSection: String) {
         self.init()
         self.embeddedSection = embeddedSection

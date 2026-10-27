@@ -13,7 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         #if !APPSTORE
-        NoteTaker.shared.shutdown()
         // The GOWA gateway Coucou started never outlives it.
         WhatsAppGOWAProcess.shared.stopNow()
         #endif
@@ -29,18 +28,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if APPSTORE
         NSApp.setActivationPolicy(.accessory)
         #else
-        // In the Dock like a regular app (Coucou → Settings → Flow), or only in the menu bar.
-        NSApp.setActivationPolicy(FlowHubController.showInDock ? .regular : .accessory)
+        // In the Dock like a regular app (Coucou → Settings → General), or only in the menu bar.
+        NSApp.setActivationPolicy(HubController.showInDock ? .regular : .accessory)
         #endif
         setupMenuBarItem()
         setupIsland()
         MachineVitals.shared.start()
         #if !APPSTORE
         // Opened by hand (Finder, Dock, Spotlight): the Coucou window shows. Not at login.
-        if FlowHubController.openAtLaunch && !FlowHubController.launchedAtLogin() {
+        if HubController.openAtLaunch && !HubController.launchedAtLogin() {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
-                FlowHubController.shared.show()
+                HubController.shared.show()
             }
         }
         #endif
@@ -61,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openIsland()
         #else
         // A click on the Dock icon: the Coucou window.
-        FlowHubController.shared.show()
+        HubController.shared.show()
         #endif
         return true
     }
@@ -75,28 +74,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.target = self
             menu.addItem(item)
         }
-        add(String(localized: "hub.page.dictation"), #selector(openFlowHub))
-        add(String(localized: "hub.page.notes"), #selector(openNotes))
-        add(NoteTaker.shared.isRecording ? String(localized: "notes.stop") : String(localized: "hub.record-call"),
-            #selector(toggleCallRecording))
-        menu.addItem(.separator())
         add(String(localized: "Open Coucou"), #selector(openIsland))
         add(NSLocalizedString("Settings…", comment: ""), #selector(openSettings))
         return menu
-    }
-
-    @objc private func openNotes() {
-        FlowHubController.shared.show(.notes)
-    }
-
-    @objc private func toggleCallRecording() {
-        let taker = NoteTaker.shared
-        if taker.isRecording {
-            taker.stop()
-        } else {
-            FlowHubController.shared.show(.notes)
-            Task { await taker.start() }
-        }
     }
     #endif
 
@@ -125,9 +105,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         menu.addItem(.separator())
         menu.addItem(withTitle: NSLocalizedString("Weekly recap", comment: ""), action: #selector(openWeeklyRecap), keyEquivalent: "")
-        #if !APPSTORE
-        menu.addItem(withTitle: String(localized: "hub.menu"), action: #selector(openFlowHub), keyEquivalent: "")
-        #endif
         menu.addItem(withTitle: NSLocalizedString("Settings…", comment: ""), action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(.separator())
         menu.addItem(withTitle: NSLocalizedString("Quit", comment: ""), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -155,11 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openUpdate() {
         MacUpdater.shared.show()
     }
-
-    @objc private func openFlowHub() {
-        if AppState.shared.mode == .expanded { islandController?.collapse() }
-        FlowHubController.shared.show(.dictation)
-    }
     #endif
 
     private var settingsWindow: NSWindow?
@@ -177,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if !APPSTORE
         // Everything in one place: Settings are the notch's pages of the Coucou window.
         let section = UserDefaults.standard.string(forKey: "settingsSection") ?? "general"
-        FlowHubController.shared.show(HubPage.forSettings(section))
+        HubController.shared.show(HubPage.forSettings(section))
         #else
 
         if let w = settingsWindow, w.isVisible {
@@ -280,7 +252,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HookServer.shared.start()
         #if !APPSTORE
         _ = VoiceEngine.shared  // registers system observers; starts mic only if the user enabled voice
-        FlowDictation.shared.start()  // watches the dictation key only if Flow dictation is on
         #endif
         N8nPoller.shared.start()
         VercelPoller.shared.start()
